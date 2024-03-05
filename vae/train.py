@@ -18,7 +18,9 @@ def ae_loss(model, x):
     ##################################################################
     # TODO 2.2: Fill in MSE loss between x and its reconstruction.
     ##################################################################
-    loss = None
+    rec = model.decoder(model.encoder(x))
+    loss = torch.mean((x-rec)*(x-rec),dim=[1,2,3])
+    loss = torch.mean(loss,dim=0)
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -41,6 +43,22 @@ def vae_loss(model, x, beta = 1):
     total_loss = None
     recon_loss = None
     kl_loss = None
+
+    mu,std = model.encoder(x)
+    base_size = model.decoder.base_size
+    eps = torch.normal(mean=0, std=1,size=model.decoder.latent_dim)
+    z = eps*std + mu
+    z = z.reshape(x.shape[0]+base_size)
+    rec = model.decoder(z)
+
+    recon_loss = torch.mean((x-rec)*(x-rec))
+    recon_loss = torch.mean(recon_loss,dim=0)
+
+    kl_loss = torch.sum(mu*mu,dim=1) + torch.sum(std*std,dim=1) - torch.sum(torch.log(std*std),dim=1) - mu.shape[1]
+    kl_loss = 0.5 * torch.mean(kl_loss,dim=0)
+    
+    total_loss = beta*kl_loss + recon_loss
+
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -58,7 +76,8 @@ def linear_beta_scheduler(max_epochs=None, target_val = 1):
     # linearly from 0 at epoch 0 to target_val at epoch max_epochs.
     ##################################################################
     def _helper(epoch):
-        pass
+        frac = target_val / max_epochs
+        return frac*epoch
     ##################################################################
     #                          END OF YOUR CODE                      #
     ##################################################################
@@ -105,7 +124,7 @@ def main(log_dir, loss_mode = 'vae', beta_mode = 'constant', num_epochs = 20, ba
     train_loader, val_loader = get_dataloaders()
 
     variational = True if loss_mode == 'vae' else False
-    model = AEModel(variational, latent_size, input_shape = (3, 32, 32)).cuda()
+    model = AEModel(variational, latent_size, input_shape = (3, 32, 32))#.cuda()
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     vis_x = next(iter(val_loader))[0][:36]
